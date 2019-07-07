@@ -117,7 +117,7 @@ set :last_slice, last_slice
 set :default_len_track, 8 # default track length
 
 set :monitor, true
-set :time_fix_play, -0.01 # latency fix
+set :time_fix_play, -0.025 # latency fix
 
 set :rec_metro, get(:metro_amp) # recording metro volume
 set :master_amp_rec, 2.0 # recording master volume
