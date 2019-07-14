@@ -12,16 +12,13 @@ set :folders, ["~/path/to/sample/folder/00/",
                "~/path/to/sample/folder/01/",
                "~/path/to/sample/folder/02/",
                "~/path/to/sample/folder/03/"]
-
 # for testing it will be okay to set up just one folder and
 # repeat this line 4 times:
 # set :folders, ["~/path/to/sample/folder/",
 #                "~/path/to/sample/folder/",
 #                "~/path/to/sample/folder/",
 #                "~/path/to/sample/folder/"]
-
 set :my_bpm, 90
-
 # - you can leave everything after here ...
 use_osc get(:ip), get(:port)
 use_sched_ahead_time 1
@@ -166,8 +163,8 @@ define :switch_row do |row_num, toggle|
   end
 end
 
-define :parse_osc do |address|
-  v = get_event(address).to_s.split(",")[6]
+define :parse_osc do | path |
+  v = get_event(path).to_s.split(",")[6]
   if v != nil
     return v[3..-2].split("/")
   else
@@ -199,118 +196,153 @@ osc "/grid/folder", 0.0
 end
 sleep 2
 
-live_loop :watch_folders do
+live_loop :osc_device_watcher do
   use_real_time
-  f = "/osc/grid/folder"
-  data  = sync f
-
-  case data[0].to_i
-  when 0
-    set :path, get(:folders)[0]
-  when 1
-    set :path, get(:folders)[1]
-  when 2
-    set :path, get(:folders)[2]
-  when 3
-    set :path, get(:folders)[3]
-  end
-  # load all sample with new path
-  (0..3).each do | i |
-    load_sample_for_mode(get(:row_mode)[i], i)
-  end
-end
-
-live_loop :watch_row_mode do
-  # sam = 0.0, rec = 1.0, tab = 2.0
-  use_real_time
-  m  = "/osc/grid/row/mode/*"
+  m  = "/osc/**"
   data  = sync m
   seg   = parse_osc m
-  row   = seg[4].to_i
-  case data[0].to_i
-  when 0
-    row_mode[row] = "sam"
-  when 1
-    row_mode[row] = "rec"
-  when 2
-    row_mode[row] = "tab"
-  end
 
-  set :row_mode, row_mode
-  load_sample_for_mode(row_mode[row], row)
-end
+  msg "Segments: ", seg
 
-live_loop :watch_row_selector do
-  use_real_time
-  s  = "/osc/grid/row/selector/*"
-  data  = sync s
-  seg   = parse_osc s
-  num   = seg[4].to_i
+  if seg[2] == "folder"
+    msg "watch_folders"
 
-  if data[0] == 1
-    selector[num] = 1
-  elsif data[0] == 0
-    selector[num] = 0
-  end
-  set :selector, selector
+    case data[0].to_i
+    when 0
+      set :path, get(:folders)[0]
+    when 1
+      set :path, get(:folders)[1]
+    when 2
+      set :path, get(:folders)[2]
+    when 3
+      set :path, get(:folders)[3]
+    end
+    # load all sample with new path
+    (0..3).each do | i |
+      load_sample_for_mode(get(:row_mode)[i], i)
+    end
 
-end
+  elsif seg[2] == "row"
+    if seg[3] == "mode"
+      msg "watch_row_mode"
 
-live_loop :watch_alt do
-  use_real_time
-  a     = "/osc/grid/row/alt/*"
-  data  = sync a
-  seg   = parse_osc a
-  num = seg[4].to_i
+      row   = seg[4].to_i
+      case data[0].to_i
+      when 0
+        row_mode[row] = "sam"
+      when 1
+        row_mode[row] = "rec"
+      when 2
+        row_mode[row] = "tab"
+      end
 
-  if data[0] == 1
-    alt[num] = 1
-    osc "/grid/row/alt/" + num.to_s, 1
-  elsif data[0] == 0
-    alt[num] = 0
-    osc "/grid/row/alt/" + num.to_s, 0
-  end
-  set :alt, alt
-end
+      set :row_mode, row_mode
+      load_sample_for_mode(row_mode[row], row)
 
-live_loop :watch_amp do
-  use_real_time
-  a     = "/osc/grid/row/amp/*"
-  data  = sync a
-  seg   = parse_osc a
-  num = seg[4].to_i
-  amp[num] = data[0].round(2)
-  control get(("s" + num.to_s).to_sym), amp: amp[num]
-  set :amp, amp
-end
+    elsif seg[3] == "selector"
+      msg "watch_row_selector"
 
-live_loop :watch_sample_controls do
-  use_real_time
-  a     = "/osc/sample/*/*"
-  data  = sync a
-  seg   = parse_osc a
-  num   = seg[3].to_i
-  opt   = seg[2].to_sym
+      row = seg[4].to_i
+      if data[0] == 1
+        selector[row] = 1
+      elsif data[0] == 0
+        selector[row] = 0
+      end
+      set :selector, selector
 
-  # e. g. attack can't be handled with 'control'
-  if opt.to_s == "amp" or opt.to_s == "lpf" or opt.to_s == "hpf"
-    modulable = true
+    elsif seg[3] == "alt"
+      msg "watch_alt"
+
+      num = seg[4].to_i
+
+      if data[0] == 1
+        alt[num] = 1
+        osc "/grid/row/alt/" + num.to_s, 1
+      elsif data[0] == 0
+        alt[num] = 0
+        osc "/grid/row/alt/" + num.to_s, 0
+      end
+      set :alt, alt
+
+    elsif seg[3] == "amp"
+      msg "watch_amp"
+
+      num = seg[4].to_i
+      amp[num] = data[0].round(2)
+      control get(("s" + num.to_s).to_sym), amp: amp[num]
+      set :amp, amp
+
+    end
+  elsif seg[2] == "num"
+    msg "watch_grid_rows"
+
+    num = seg[3].to_i
+    osc "/grid/num/" + num.to_s, 1
+
+    y = which_row(num, 0)
+
+    if data[0] == 1 and get(:alt)[y] == 0
+      x_start[y] = num
+      firing[y] = true
+    elsif data[0] == 0 and get(:alt)[y] == 0
+      firing[y] = false
+    end
+
+    if data[0] == 1 and get(:alt)[y] == 1
+      x_end[y] = num
+      firing[y] = false
+    end
+
+    if x_start[y] == x_end[y]
+      score[y] = (ring x_start[y])
+    else
+      score[y] = (range x_start[y], x_end[y], inclusive: true)
+    end
+
+    set :x_start, x_start
+    set :x_end, x_end
+    set :score, score
+    set :firing, firing
+
+  elsif seg[1] == "sample"
+    msg "watch_sample_controls"
+
+    num   = seg[3].to_i
+    opt   = seg[2].to_sym
+
+    # e. g. attack can't be handled with 'control'
+    if opt.to_s == "amp" or opt.to_s == "lpf" or opt.to_s == "hpf"
+      modulable = true
+    else
+      modulable = false
+    end
+
+    handle = ("s" + num.to_s).to_sym
+
+    eval(opt.to_s)[num] = data[0]
+    set opt, eval(opt.to_s)
+
+    if modulable
+      control get(handle), opt=>data[0]
+    end
+
+  elsif seg[1] == "looper"
+    msg "watch_looper_controls"
+
+    if seg[2] == "metro"
+      ctrl = seg[2].to_s + "_" + seg[3].to_s
+      set ctrl.to_sym, data[0]
+    else
+      num = seg[3].to_i
+      # /osc/looper/rec/0
+      ctrl = seg[1].to_s + "_" + seg[2].to_s
+      eval(ctrl)[num] = data[0].to_i
+      set ctrl.to_sym, eval(ctrl)
+    end
+
   else
-    modulable = false
+    msg "Don't know what to do ..."
   end
-
-  handle = ("s" + num.to_s).to_sym
-
-  eval(opt.to_s)[num] = data[0]
-  set opt, eval(opt.to_s)
-
-  if modulable
-    control get(handle), opt=>data[0]
-  end
-
-  # msg "Current opt: ", eval(opt.to_s)[num]
-  # msg "Opt: ", opt
-
 end
 
 define :which_row do |button_number, row|
@@ -319,42 +351,6 @@ define :which_row do |button_number, row|
   else
     which_row(button_number, row + 1)
   end
-end
-
-live_loop :watch_grid_rows do
-  use_real_time
-  r     = "/osc/grid/num/*"
-  data  = sync r
-  seg   = parse_osc r
-  num = seg[3].to_i
-  osc "/grid/num/" + num.to_s, 1
-
-  y = which_row(num, 0)
-
-  if data[0] == 1 and get(:alt)[y] == 0
-    x_start[y] = num
-    firing[y] = true
-  elsif data[0] == 0 and get(:alt)[y] == 0
-    firing[y] = false
-  end
-
-  if data[0] == 1 and get(:alt)[y] == 1
-    x_end[y] = num
-    firing[y] = false
-  end
-
-  if x_start[y] == x_end[y]
-    score[y] = (ring x_start[y])
-  else
-    score[y] = (range x_start[y], x_end[y], inclusive: true)
-  end
-
-  set :x_start, x_start
-  set :x_end, x_end
-  set :score, score
-  set :firing, firing
-  # msg "Score für aktuelle Reihe: ", score[y]
-
 end
 
 define :build_row_loop do |y|
