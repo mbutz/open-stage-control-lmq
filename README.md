@@ -1,4 +1,4 @@
-# lmq
+# lmq (based on Open Stage Control)
 
 An application to manipulate preconfigured or live recorded samples in Sonic Pi. Currently implemented with a Open Stage Control interface.
 
